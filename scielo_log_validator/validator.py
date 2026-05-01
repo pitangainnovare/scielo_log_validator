@@ -397,7 +397,6 @@ def validate_path_name(path):
     # List of functions to extract attributes from the file path
     for func_impl, func_name in [
         (file_utils.extract_date_from_path, 'date'),
-        (file_utils.extract_collection_from_path, 'collection'),
         (file_utils.has_paperboy_format, 'paperboy'),
         (file_utils.extract_mime_from_path, 'mimetype'),
         (file_utils.extract_file_extension_from_path, 'extension'),

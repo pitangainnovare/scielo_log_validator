@@ -119,7 +119,6 @@ class TestValidator(unittest.TestCase):
         path = self.log_file_wi_2_invalid_file_name
         results = validator.validate_path_name(path)
         self.assertIn('date', results)
-        self.assertIn('collection', results)
         self.assertIn('paperboy', results)
         self.assertIn('mimetype', results)
         self.assertIn('extension', results)
@@ -137,7 +136,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-02-20', 
-                'collection': 'wid', 
                 'paperboy': True, 
                 'mimetype': 'application/gzip', 
                 'extension': '.gz'
@@ -196,7 +194,7 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-02-20', 
-                'collection': 'wid', 
+
                 'paperboy': True, 
                 'mimetype': 'application/gzip', 
                 'extension': '.gz'
@@ -263,10 +261,6 @@ class TestValidator(unittest.TestCase):
         obtained_results = validator.pipeline_validate(self.log_file_wi_1_invalid_content, sample_size=100)
         self.assertTrue(obtained_results['is_valid']['dates'])
 
-    def test_pipeline_validate_with_directory(self):
-        obtained_results = validator.pipeline_validate(self.log_file_wi_1_invalid_content, sample_size=100)
-        self.assertTrue(obtained_results['is_valid']['dates'])
-
     def test_get_date_frequencies(self):
         results = {
             'content': {
@@ -302,7 +296,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-05-15',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -342,7 +335,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-09-15',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -382,7 +374,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-12-10',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -422,7 +413,7 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2025-08-17',
-                'collection': 'scl',
+
                 'paperboy': False,
                 'mimetype': 'text/plain',
                 'extension': '.log'
