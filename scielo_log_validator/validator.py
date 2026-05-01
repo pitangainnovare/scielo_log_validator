@@ -17,6 +17,9 @@ MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERC
 # Minimum number of sample lines to be considered in the content validation
 MIN_NUMBER_OF_SAMPLE_LINES = int(os.environ.get('MIN_NUMBER_OF_SAMPLE_LINES', '1000'))
 
+MIN_PLAUSIBLE_UNIX_TIMESTAMP = 946684800
+MAX_PLAUSIBLE_UNIX_TIMESTAMP = 4102444800
+
 # Default message for the application
 COMMAND_LINE_SCRIPT_MESSAGE = '''
 SciELO Log Validator
@@ -93,6 +96,17 @@ def get_year_month_day_hour_from_timestamp(timestamp):
             timestamp = int(timestamp)
         except ValueError:
             raise exceptions.InvalidTimestampContentError("Timestamp must be an integer or a string representing an integer")
+
+    # BunnyCDN files may store timestamps either as full unix seconds (10 digits)
+    # or bucketed values divided by 1000 (7 digits). Normalize both cases.
+    timestamp_str = str(timestamp)
+    if len(timestamp_str) == 7:
+        timestamp *= 1000
+    elif len(timestamp_str) == 13:
+        timestamp //= 1000
+
+    if not MIN_PLAUSIBLE_UNIX_TIMESTAMP <= timestamp <= MAX_PLAUSIBLE_UNIX_TIMESTAMP:
+        raise exceptions.InvalidTimestampContentError("Timestamp is outside the supported range")
 
     dt = datetime.fromtimestamp(timestamp)
     return dt.year, dt.month, dt.day, dt.hour
@@ -232,7 +246,7 @@ def analyze_log_content(path, total_lines, sample_lines):
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN,
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_WITH_IP_LIST,
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN_WITH_IP_LIST,
-                    values.PATTERN_BUNNY,
+                    values.PATTERN_BUNNYCDN_LOG_FORMAT,
                 ]
 
                 match = None
@@ -266,13 +280,17 @@ def analyze_log_content(path, total_lines, sample_lines):
                     content = match.groupdict()
 
                     matched_datetime = content.get('date', '')
-                    matched_timestamp = content.get('timestamp', '')
+                    matched_timestamp = content.get('timestamp') or content.get('unix_ts', '')
 
                     try:
                         if matched_datetime:
                             year, month, day, hour = get_year_month_day_hour_from_date_str(matched_datetime)
                         elif matched_timestamp:
                             year, month, day, hour = get_year_month_day_hour_from_timestamp(matched_timestamp)
+
+                        else:
+                            invalid_lines += 1
+                            continue
 
                         if (year, month, day, hour) not in datetimes:
                             datetimes[(year, month, day, hour)] = 0

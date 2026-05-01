@@ -1,4 +1,6 @@
 import datetime
+import gzip
+import tempfile
 import unittest
 
 from scielo_log_validator import exceptions, validator
@@ -420,11 +422,11 @@ class TestValidator(unittest.TestCase):
             },
             'content': {
                 'summary': {
-                    'ips': {'local': 0, 'remote': 145, 'unknown': 5},
+                    'ips': {'local': 0, 'remote': 149, 'unknown': 1},
                     'datetimes': {
                         (2025, 8, 16, 20): 10,
                         (2025, 8, 16, 23): 19,
-                        (2025, 8, 17, 0): 25,
+                        (2025, 8, 17, 0): 29,
                         (2025, 8, 17, 1): 58,
                         (2025, 8, 17, 2): 3,
                         (2025, 8, 17, 3): 17,
@@ -433,7 +435,7 @@ class TestValidator(unittest.TestCase):
                         (2025, 8, 17, 19): 2,
                         (2025, 8, 17, 20): 7,
                     },
-                    'invalid_lines': 5,
+                    'invalid_lines': 1,
                     'total_lines': 150
                 }
             },
@@ -446,3 +448,30 @@ class TestValidator(unittest.TestCase):
         }
 
         self.assertDictEqual(results, expected)
+
+    def test_line_with_bucketed_bunny_timestamp(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2025-08-17_scielo-br.log.gz'
+            with gzip.open(path, 'wt') as fout:
+                fout.write(
+                    'HIT|200|1766620|5615808|4384504|20.90.7.0|-|'
+                    'https://books.scielo.org/id/3yrrb/pdf/benchimol-9788575412350.pdf|FR|'
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; '
+                    'ChatGPT-User/1.0; +https://openai.com/bot|'
+                    'ee24594ec72285fab56eb85c792c56c0|GB\n'
+                )
+
+            results = validator.pipeline_validate(
+                sample_size=1,
+                path=path,
+                apply_path_validation=True,
+                apply_content_validation=True,
+            )
+
+        self.assertEqual(results['path']['date'], '2025-08-17')
+        self.assertEqual(results['path']['extension'], '.gz')
+        self.assertEqual(results['content']['summary']['ips'], {'local': 0, 'remote': 1, 'unknown': 0})
+        self.assertEqual(results['content']['summary']['invalid_lines'], 0)
+        self.assertEqual(results['content']['summary']['datetimes'], {(2025, 12, 24, 20): 1})
+        self.assertEqual(results['probably_date'].date(), datetime.date(2025, 12, 24))
+        self.assertTrue(results['is_valid']['ips'])
