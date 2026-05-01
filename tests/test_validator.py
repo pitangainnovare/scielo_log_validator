@@ -88,7 +88,7 @@ class TestValidator(unittest.TestCase):
                 }
             }
         }
-        self.assertFalse(validator.validate_ip_distribution(results))
+        self.assertFalse(validator.validate_ip_distribution(results, 10))
 
     def test_validate_ip_distribution_is_true_11_percent_remote(self):
         results = {
@@ -99,7 +99,7 @@ class TestValidator(unittest.TestCase):
                 }
             }
         }
-        self.assertTrue(validator.validate_ip_distribution(results))
+        self.assertTrue(validator.validate_ip_distribution(results, 10))
 
     def test_validate_date_consistency_is_true(self):
         results = {

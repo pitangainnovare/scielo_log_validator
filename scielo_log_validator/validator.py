@@ -15,7 +15,7 @@ from scielo_log_validator import date_utils, exceptions, file_utils, values
 DAYS_DELTA = int(os.environ.get('DAYS_DELTA', '30'))
 
 # Minimum acceptable percentage of remote IPs to consider the log file valid
-MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS', '10'))
+MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS', '3'))
 
 # Minimum number of sample lines to be considered in the content validation
 MIN_NUMBER_OF_SAMPLE_LINES = int(os.environ.get('MIN_NUMBER_OF_SAMPLE_LINES', '1000'))
@@ -314,7 +314,7 @@ def analyze_log_content(path, total_lines, sample_lines):
     }
 
 
-def validate_ip_distribution(results):
+def validate_ip_distribution(results, minimum_remote_ip_threshold=MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS):
     """
     Validates the distribution of remote and local IPs in the given results.
 
@@ -347,21 +347,12 @@ def validate_ip_distribution(results):
     if (remote_ips == 0 and local_ips == 0) or total_lines == 0:
         return False
 
-    # Compute the percentage of remote IPs relative to the total number of lines
-    percent_remote_ips = float(remote_ips) / float(total_lines) * 100
+    percent_remote = float(remote_ips) / float(total_lines) * 100
 
-    # Compute the percentage of local IPs relative to the total number of lines
-    percent_local_ips = float(local_ips) / float(total_lines) * 100
-
-    # The file is valid if there is a higher percentage of remote IPs
-    if percent_remote_ips > percent_local_ips:
+    if percent_remote >= minimum_remote_ip_threshold:
         return True
 
-    # The file is valid if there is a minimum percentage of remote IPs
-    if percent_remote_ips > MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS:
-        return True
-
-    return False
+    return remote_ips >= local_ips
 
 
 def validate_date_consistency(results, days_delta=DAYS_DELTA):
