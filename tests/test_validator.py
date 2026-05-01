@@ -475,3 +475,28 @@ class TestValidator(unittest.TestCase):
         self.assertEqual(results['content']['summary']['datetimes'], {(2025, 12, 24, 20): 1})
         self.assertEqual(results['probably_date'].date(), datetime.date(2025, 12, 24))
         self.assertTrue(results['is_valid']['ips'])
+
+    def test_get_probably_date_returns_most_frequent(self):
+        results = {
+            'content': {
+                'summary': {
+                    'datetimes': {
+                        (2023, 3, 12, 14): 10,
+                        (2023, 3, 13, 10): 5,
+                        (2023, 3, 11, 8): 2,
+                    }
+                }
+            }
+        }
+        result = validator.get_probably_date(results)
+        self.assertIsInstance(result, datetime.datetime)
+        self.assertEqual(result.year, 2023)
+        self.assertEqual(result.month, 3)
+        self.assertEqual(result.day, 12)
+
+    def test_get_probably_date_empty_dict(self):
+        results = {'content': {'summary': {'datetimes': {}}}}
+        result = validator.get_probably_date(results)
+        self.assertIsInstance(result, dict)
+        self.assertIn('error', result)
+        self.assertEqual(result['error'], 'Date dictionary is empty')

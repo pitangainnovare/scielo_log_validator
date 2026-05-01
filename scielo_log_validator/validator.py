@@ -11,6 +11,9 @@ from ipaddress import ip_address
 from scielo_log_validator import date_utils, exceptions, file_utils, values
 
 
+# Days delta to consider the log file valid
+DAYS_DELTA = int(os.environ.get('DAYS_DELTA', '30'))
+
 # Minimum acceptable percentage of remote IPs to consider the log file valid
 MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS', '10'))
 
@@ -167,15 +170,16 @@ def get_probably_date(results):
     """
     ymd_to_freq = get_date_frequencies(results)
 
+    if not ymd_to_freq:
+        return {'error': 'Date dictionary is empty'}
+
     try:
-        # Sort the dates by frequency and get the most frequent one
-        ymd, _ = sorted(ymd_to_freq.items(), key=operator.itemgetter(1)).pop()
+        # Get the date with the highest frequency
+        ymd, _ = max(ymd_to_freq.items(), key=operator.itemgetter(1))
         y, m, d = ymd
         return datetime(y, m, d)
     except ValueError:
         return {'error': 'Could not determine a probable date'}
-    except IndexError:
-        return {'error': 'Date dictionary is empty'}
 
 
 def get_total_lines(path, buffer_size=2048):
@@ -360,7 +364,7 @@ def validate_ip_distribution(results):
     return False
 
 
-def validate_date_consistency(results, days_delta=5):
+def validate_date_consistency(results, days_delta=DAYS_DELTA):
     """
     Validates the consistency of dates from the file path and content to determine if they are significantly different.
 
@@ -373,7 +377,7 @@ def validate_date_consistency(results, days_delta=5):
     """
     # Ensure that the days delta is positive
     if days_delta < 0:
-        days_delta = 5
+        days_delta = DAYS_DELTA
 
     file_path_date = results.get('path', {}).get('date', '')
     file_content_dates = results.get('content', {}).get('summary', {}).get('datetimes', {})
@@ -461,7 +465,7 @@ def validate_content(path, sample_size=0.1, buffer_size=2048, min_lines=MIN_NUMB
         return {'summary': {'total_lines': {'error': 'File is empty'},}}
 
 
-def pipeline_validate(path, sample_size=0.1, buffer_size=2048, days_delta=5, apply_path_validation=True, apply_content_validation=True):
+def pipeline_validate(path, sample_size=0.1, buffer_size=2048, days_delta=30, apply_path_validation=True, apply_content_validation=True):
     """
     Validates a log file by applying various validation checks.
     
