@@ -1,33 +1,3 @@
-COLLECTION_FILE_NAME_IDENTIFIERS = {
-    '_scielo.ar': 'arg',
-    '_scielo.bo': 'bol',
-    '_scielo.1.br': 'scl',
-    '_scielo.2.br': 'scl',
-    '_scielo-br': 'scl',
-    '_scielo.cl': 'chl',
-    '_scielo.co': 'col',
-    '_scielo.cr': 'cru',
-    '_scielo.cu': 'cub',
-    '_scielo.ec': 'ecu',
-    '_scielo.mx': 'mex',
-    '_scielo.py': 'pry',
-    '_scielo.pe': 'per',
-    '_scielo.pt': 'prt',
-    '_scielo.sp.1': 'ssp',
-    '_scielo.sp.2': 'ssp',
-    '_scielo.za': 'sza',
-    '_scielo.es': 'esp',
-    '_scielo.uy': 'ury',
-    '_scielo.ven': 'ven',
-    '_caribbean.scielo.org.1': 'wid',
-    '_caribbean.scielo.org.2': 'wid',
-    '_scielo.data': 'dat',
-    '_scielo.preprints': 'pre',
-    '_scielo.pepsic': 'psi',
-    '_scielo.revenf': 'rev',
-    '_scielo.ss': 'sss',
-}
-
 PATTERN_Y_M_D = r'\d{4}-\d{2}-\d{2}'
 
 PATTERN_YMD = r'\d{4}\d{2}\d{2}'
@@ -63,17 +33,18 @@ PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN_WITH_IP_LIST = (
     r'(?P<domain>.*?)\s' + PATTERN_COMMON_LOG_FORMAT_WITH_IP_LIST + r'\s+"(?P<referrer>.*?)"\s+"(?P<user_agent>.*?)"'
 )
 
-PATTERN_BUNNY = (
+PATTERN_BUNNYCDN_LOG_FORMAT = (
     r'^(?P<cache>HIT|MISS|BYPASS|EXPIRED|STALE)\|'
     r'(?P<status>\d{3})\|'
-    r'(?P<timestamp>\d{10})\|'
+    r'(?P<unix_ts>\d{7}|\d{10})\|'
     r'(?P<length>\d+)\|'
     r'(?P<zone>\d+)\|'
     r'(?P<ip>[a-fA-F0-9:.]+)\|'
     r'(?P<referrer>[^|]*)\|'
     r'(?P<path>[^|]+)\|'
-    r'(?P<country>[A-Z]{2})\|'
-    r'(?P<user_agent>[^|]+)\|'
+    r'(?P<country>[A-Z0-9]{2,3})\|'
+    r'(?P<user_agent>[^|]*)\|'
     r'(?P<request_id>[a-f0-9]{32})\|'
-    r'(?P<iq>[A-Z]{2})$'
+    r'(?P<iq>[A-Z]{2})'
+    r'(?:\|(?P<shield_status>[^|]+))?$'
 )

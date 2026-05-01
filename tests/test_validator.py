@@ -1,4 +1,6 @@
 import datetime
+import gzip
+import tempfile
 import unittest
 
 from scielo_log_validator import exceptions, validator
@@ -86,7 +88,7 @@ class TestValidator(unittest.TestCase):
                 }
             }
         }
-        self.assertFalse(validator.validate_ip_distribution(results))
+        self.assertFalse(validator.validate_ip_distribution(results, 10))
 
     def test_validate_ip_distribution_is_true_11_percent_remote(self):
         results = {
@@ -97,7 +99,7 @@ class TestValidator(unittest.TestCase):
                 }
             }
         }
-        self.assertTrue(validator.validate_ip_distribution(results))
+        self.assertTrue(validator.validate_ip_distribution(results, 10))
 
     def test_validate_date_consistency_is_true(self):
         results = {
@@ -119,7 +121,6 @@ class TestValidator(unittest.TestCase):
         path = self.log_file_wi_2_invalid_file_name
         results = validator.validate_path_name(path)
         self.assertIn('date', results)
-        self.assertIn('collection', results)
         self.assertIn('paperboy', results)
         self.assertIn('mimetype', results)
         self.assertIn('extension', results)
@@ -137,7 +138,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-02-20', 
-                'collection': 'wid', 
                 'paperboy': True, 
                 'mimetype': 'application/gzip', 
                 'extension': '.gz'
@@ -196,7 +196,7 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-02-20', 
-                'collection': 'wid', 
+
                 'paperboy': True, 
                 'mimetype': 'application/gzip', 
                 'extension': '.gz'
@@ -263,10 +263,6 @@ class TestValidator(unittest.TestCase):
         obtained_results = validator.pipeline_validate(self.log_file_wi_1_invalid_content, sample_size=100)
         self.assertTrue(obtained_results['is_valid']['dates'])
 
-    def test_pipeline_validate_with_directory(self):
-        obtained_results = validator.pipeline_validate(self.log_file_wi_1_invalid_content, sample_size=100)
-        self.assertTrue(obtained_results['is_valid']['dates'])
-
     def test_get_date_frequencies(self):
         results = {
             'content': {
@@ -302,7 +298,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-05-15',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -342,7 +337,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-09-15',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -382,7 +376,6 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2024-12-10',
-                'collection': 'chl',
                 'paperboy': True,
                 'mimetype': 'application/gzip',
                 'extension': '.gz'
@@ -422,18 +415,18 @@ class TestValidator(unittest.TestCase):
             },
             'path': {
                 'date': '2025-08-17',
-                'collection': 'scl',
+
                 'paperboy': False,
                 'mimetype': 'text/plain',
                 'extension': '.log'
             },
             'content': {
                 'summary': {
-                    'ips': {'local': 0, 'remote': 145, 'unknown': 5},
+                    'ips': {'local': 0, 'remote': 149, 'unknown': 1},
                     'datetimes': {
                         (2025, 8, 16, 20): 10,
                         (2025, 8, 16, 23): 19,
-                        (2025, 8, 17, 0): 25,
+                        (2025, 8, 17, 0): 29,
                         (2025, 8, 17, 1): 58,
                         (2025, 8, 17, 2): 3,
                         (2025, 8, 17, 3): 17,
@@ -442,7 +435,7 @@ class TestValidator(unittest.TestCase):
                         (2025, 8, 17, 19): 2,
                         (2025, 8, 17, 20): 7,
                     },
-                    'invalid_lines': 5,
+                    'invalid_lines': 1,
                     'total_lines': 150
                 }
             },
@@ -455,3 +448,55 @@ class TestValidator(unittest.TestCase):
         }
 
         self.assertDictEqual(results, expected)
+
+    def test_line_with_bucketed_bunny_timestamp(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2025-08-17_scielo-br.log.gz'
+            with gzip.open(path, 'wt') as fout:
+                fout.write(
+                    'HIT|200|1766620|5615808|4384504|20.90.7.0|-|'
+                    'https://books.scielo.org/id/3yrrb/pdf/benchimol-9788575412350.pdf|FR|'
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; '
+                    'ChatGPT-User/1.0; +https://openai.com/bot|'
+                    'ee24594ec72285fab56eb85c792c56c0|GB\n'
+                )
+
+            results = validator.pipeline_validate(
+                sample_size=1,
+                path=path,
+                apply_path_validation=True,
+                apply_content_validation=True,
+            )
+
+        self.assertEqual(results['path']['date'], '2025-08-17')
+        self.assertEqual(results['path']['extension'], '.gz')
+        self.assertEqual(results['content']['summary']['ips'], {'local': 0, 'remote': 1, 'unknown': 0})
+        self.assertEqual(results['content']['summary']['invalid_lines'], 0)
+        self.assertEqual(results['content']['summary']['datetimes'], {(2025, 12, 24, 20): 1})
+        self.assertEqual(results['probably_date'].date(), datetime.date(2025, 12, 24))
+        self.assertTrue(results['is_valid']['ips'])
+
+    def test_get_probably_date_returns_most_frequent(self):
+        results = {
+            'content': {
+                'summary': {
+                    'datetimes': {
+                        (2023, 3, 12, 14): 10,
+                        (2023, 3, 13, 10): 5,
+                        (2023, 3, 11, 8): 2,
+                    }
+                }
+            }
+        }
+        result = validator.get_probably_date(results)
+        self.assertIsInstance(result, datetime.datetime)
+        self.assertEqual(result.year, 2023)
+        self.assertEqual(result.month, 3)
+        self.assertEqual(result.day, 12)
+
+    def test_get_probably_date_empty_dict(self):
+        results = {'content': {'summary': {'datetimes': {}}}}
+        result = validator.get_probably_date(results)
+        self.assertIsInstance(result, dict)
+        self.assertIn('error', result)
+        self.assertEqual(result['error'], 'Date dictionary is empty')

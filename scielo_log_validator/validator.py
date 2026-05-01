@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from argparse import ArgumentParser
 from datetime import datetime
+from pprint import pprint
 
 import os
 import operator
@@ -11,11 +12,17 @@ from ipaddress import ip_address
 from scielo_log_validator import date_utils, exceptions, file_utils, values
 
 
+# Days delta to consider the log file valid
+DAYS_DELTA = int(os.environ.get('DAYS_DELTA', '30'))
+
 # Minimum acceptable percentage of remote IPs to consider the log file valid
-MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS', '10'))
+MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS = float(os.environ.get('MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS', '3'))
 
 # Minimum number of sample lines to be considered in the content validation
 MIN_NUMBER_OF_SAMPLE_LINES = int(os.environ.get('MIN_NUMBER_OF_SAMPLE_LINES', '1000'))
+
+MIN_PLAUSIBLE_UNIX_TIMESTAMP = 946684800
+MAX_PLAUSIBLE_UNIX_TIMESTAMP = 4102444800
 
 # Default message for the application
 COMMAND_LINE_SCRIPT_MESSAGE = '''
@@ -94,6 +101,17 @@ def get_year_month_day_hour_from_timestamp(timestamp):
         except ValueError:
             raise exceptions.InvalidTimestampContentError("Timestamp must be an integer or a string representing an integer")
 
+    # BunnyCDN files may store timestamps either as full unix seconds (10 digits)
+    # or bucketed values divided by 1000 (7 digits). Normalize both cases.
+    timestamp_str = str(timestamp)
+    if len(timestamp_str) == 7:
+        timestamp *= 1000
+    elif len(timestamp_str) == 13:
+        timestamp //= 1000
+
+    if not MIN_PLAUSIBLE_UNIX_TIMESTAMP <= timestamp <= MAX_PLAUSIBLE_UNIX_TIMESTAMP:
+        raise exceptions.InvalidTimestampContentError("Timestamp is outside the supported range")
+
     dt = datetime.fromtimestamp(timestamp)
     return dt.year, dt.month, dt.day, dt.hour
 
@@ -153,15 +171,16 @@ def get_probably_date(results):
     """
     ymd_to_freq = get_date_frequencies(results)
 
+    if not ymd_to_freq:
+        return {'error': 'Date dictionary is empty'}
+
     try:
-        # Sort the dates by frequency and get the most frequent one
-        ymd, _ = sorted(ymd_to_freq.items(), key=operator.itemgetter(1)).pop()
+        # Get the date with the highest frequency
+        ymd, _ = max(ymd_to_freq.items(), key=operator.itemgetter(1))
         y, m, d = ymd
         return datetime(y, m, d)
     except ValueError:
         return {'error': 'Could not determine a probable date'}
-    except IndexError:
-        return {'error': 'Date dictionary is empty'}
 
 
 def get_total_lines(path, buffer_size=2048):
@@ -184,11 +203,11 @@ def get_total_lines(path, buffer_size=2048):
         with file_utils.open_file(path=path, buffer_size=buffer_size) as fin:
             return sum(1 for _ in fin)
     except EOFError:
-        raise exceptions.TruncatedLogFileError('Arquivo %s está truncado' % path)
+        raise exceptions.TruncatedLogFileError('File %s is truncated' % path)
     except exceptions.InvalidLogFileMimeError:
-        raise exceptions.InvalidLogFileMimeError('Arquivo %s é inválido' % path)
+        raise exceptions.InvalidLogFileMimeError('File %s is invalid' % path)
     except exceptions.LogFileIsEmptyError:
-        raise exceptions.LogFileIsEmptyError('Arquivo %s está vazio' % path)
+        raise exceptions.LogFileIsEmptyError('File %s is empty' % path)
 
 
 def analyze_log_content(path, total_lines, sample_lines):
@@ -214,7 +233,7 @@ def analyze_log_content(path, total_lines, sample_lines):
     try:
         eval_lines = set(range(0, total_lines + 1, int(total_lines/sample_lines)))
     except ZeroDivisionError:
-        raise exceptions.LogFileIsEmptyError('Arquivo %s está vazio' % path)
+        raise exceptions.LogFileIsEmptyError('File %s is empty' % path)
 
     line_counter = 0
 
@@ -232,7 +251,7 @@ def analyze_log_content(path, total_lines, sample_lines):
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN,
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_WITH_IP_LIST,
                     values.PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN_WITH_IP_LIST,
-                    values.PATTERN_BUNNY,
+                    values.PATTERN_BUNNYCDN_LOG_FORMAT,
                 ]
 
                 match = None
@@ -266,13 +285,17 @@ def analyze_log_content(path, total_lines, sample_lines):
                     content = match.groupdict()
 
                     matched_datetime = content.get('date', '')
-                    matched_timestamp = content.get('timestamp', '')
+                    matched_timestamp = content.get('timestamp') or content.get('unix_ts', '')
 
                     try:
                         if matched_datetime:
                             year, month, day, hour = get_year_month_day_hour_from_date_str(matched_datetime)
                         elif matched_timestamp:
                             year, month, day, hour = get_year_month_day_hour_from_timestamp(matched_timestamp)
+
+                        else:
+                            invalid_lines += 1
+                            continue
 
                         if (year, month, day, hour) not in datetimes:
                             datetimes[(year, month, day, hour)] = 0
@@ -292,7 +315,7 @@ def analyze_log_content(path, total_lines, sample_lines):
     }
 
 
-def validate_ip_distribution(results):
+def validate_ip_distribution(results, minimum_remote_ip_threshold=MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS):
     """
     Validates the distribution of remote and local IPs in the given results.
 
@@ -325,24 +348,15 @@ def validate_ip_distribution(results):
     if (remote_ips == 0 and local_ips == 0) or total_lines == 0:
         return False
 
-    # Compute the percentage of remote IPs relative to the total number of lines
-    percent_remote_ips = float(remote_ips) / float(total_lines) * 100
+    percent_remote = float(remote_ips) / float(total_lines) * 100
 
-    # Compute the percentage of local IPs relative to the total number of lines
-    percent_local_ips = float(local_ips) / float(total_lines) * 100
-
-    # The file is valid if there is a higher percentage of remote IPs
-    if percent_remote_ips > percent_local_ips:
+    if percent_remote >= minimum_remote_ip_threshold:
         return True
 
-    # The file is valid if there is a minimum percentage of remote IPs
-    if percent_remote_ips > MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS:
-        return True
-
-    return False
+    return remote_ips >= local_ips
 
 
-def validate_date_consistency(results, days_delta=5):
+def validate_date_consistency(results, days_delta=DAYS_DELTA):
     """
     Validates the consistency of dates from the file path and content to determine if they are significantly different.
 
@@ -355,7 +369,7 @@ def validate_date_consistency(results, days_delta=5):
     """
     # Ensure that the days delta is positive
     if days_delta < 0:
-        days_delta = 5
+        days_delta = DAYS_DELTA
 
     file_path_date = results.get('path', {}).get('date', '')
     file_content_dates = results.get('content', {}).get('summary', {}).get('datetimes', {})
@@ -397,7 +411,6 @@ def validate_path_name(path):
     # List of functions to extract attributes from the file path
     for func_impl, func_name in [
         (file_utils.extract_date_from_path, 'date'),
-        (file_utils.extract_collection_from_path, 'collection'),
         (file_utils.has_paperboy_format, 'paperboy'),
         (file_utils.extract_mime_from_path, 'mimetype'),
         (file_utils.extract_file_extension_from_path, 'extension'),
@@ -435,6 +448,9 @@ def validate_content(path, sample_size=0.1, buffer_size=2048, min_lines=MIN_NUMB
         if total_lines <= min_lines:
             sample_size = 1.0
         sample_lines = int(total_lines * sample_size)
+        # Prevent division by zero in analyze_log_content
+        if sample_lines <= 0:
+            sample_lines = total_lines if total_lines > 0 else 1
         return {'summary': analyze_log_content(path, total_lines, sample_lines)}
     except exceptions.TruncatedLogFileError:
         return {'summary': {'total_lines': {'error': 'File is truncated'},}}
@@ -444,7 +460,7 @@ def validate_content(path, sample_size=0.1, buffer_size=2048, min_lines=MIN_NUMB
         return {'summary': {'total_lines': {'error': 'File is empty'},}}
 
 
-def pipeline_validate(path, sample_size=0.1, buffer_size=2048, days_delta=5, apply_path_validation=True, apply_content_validation=True):
+def pipeline_validate(path, sample_size=0.1, buffer_size=2048, days_delta=30, apply_path_validation=True, apply_content_validation=True):
     """
     Validates a log file by applying various validation checks.
     
@@ -497,7 +513,6 @@ def main():
     execution_mode = get_execution_mode(params.path)
 
     print(COMMAND_LINE_SCRIPT_MESSAGE)
-    from pprint import pprint
 
     if execution_mode == 'validate-file':
         # Validate a single file

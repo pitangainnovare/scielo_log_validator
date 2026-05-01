@@ -1,7 +1,6 @@
 # SciELO Log Validator
 
-The SciELO Log Validator project provides tools to validate log files for the SciELO platform. It includes both command line and Python library usage options.
-
+The SciELO Log Validator project provides tools to validate log files for the SciELO platform. It supports Apache NCSA extended log format, BunnyCDN pipe-delimited format, IPv6 addresses, and IP list headers. It includes both command line and Python library usage options.
 
 ## Installation
 
@@ -19,18 +18,18 @@ cd scielo_log_validator
 pip install -r requirements.txt
 ```
 
-## To set up a development environment, follow these steps:
+### Development setup
 
 1. Clone the repository:
 ```bash
 git clone https://github.com/scieloorg/scielo_log_validator.git
 cd scielo_log_validator
-  ```
+```
 
 2. Create a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+source venv/bin/activate
 ```
 
 3. Install the dependencies:
@@ -43,112 +42,117 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-5. Run tests to ensure everything is set up correctly:
+5. Run tests:
 ```bash
-python -m unittest discover
+python -m pytest
 ```
 
+## Environment Variables
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `DAYS_DELTA` | int | `30` | Maximum number of days between the file name date and the most probable content date for the log file to be considered valid. |
+| `MIN_ACCEPTABLE_PERCENT_OF_REMOTE_IPS` | float | `3` | Minimum percentage of remote IPs required to consider the IP distribution valid. If the threshold is not met, the file is still accepted as long as remote IPs outnumber local IPs. |
+| `MIN_NUMBER_OF_SAMPLE_LINES` | int | `1000` | Minimum number of lines in a file for the sample size to take effect. Files with fewer lines than this threshold are analyzed in full (sample size overridden to 1.0). |
 
 ## Usage
 
-__Command line__
+### Command line
 
 ```bash
-usage: log_validator [-h] -p PATH [-s SAMPLE_SIZE] [--apply_path_validation] [--apply_content_validation]
-
-options:
-  -h, --help            show this help message and exit
-  -p PATH, --path PATH  File or directory to be checked
-  -s SAMPLE_SIZE, --sample_size SAMPLE_SIZE
-              Sample size to be checked (must be between 0 and 1)
-  --apply_path_validation
-                        Indicates whether to apply path validation
-  --apply_content_validation
-                        Indicates whether to apply content validation
-
-# Here is an example of execution for a single file:
-log_validator -p /home/user/2022-03-01_scielo-br.log.gz --apply_path_validation --apply_content_validation
-
-# Here is an example of execution for an entire directory:
-log_validator -p /home/user --apply_path_validation --apply_content_validation
+log_validator [-h] -p PATH [-s SAMPLE_SIZE] [-b BUFFER_SIZE] [-d DAYS_DELTA]
+              [--no_path_validation] [--no_content_validation]
 ```
 
-__Python library__
+| Argument | Default | Description |
+|---|---|---|
+| `-p`, `--path` | *(required)* | File or directory to validate. |
+| `-s`, `--sample_size` | `0.1` | Fraction of lines to sample (0–1). |
+| `-b`, `--buffer_size` | `2048` | Buffer size in bytes for MIME type detection. |
+| `-d`, `--days_delta` | `5` | Days threshold for date consistency check. |
+| `--no_path_validation` | — | Disable file-name validation. |
+| `--no_content_validation` | — | Disable file-content validation. |
+
+**Examples:**
+
+```bash
+# Validate a single file
+log_validator -p /home/user/2022-03-01_scielo-br.log.gz
+
+# Validate an entire directory
+log_validator -p /home/user/
+```
+
+### Python library
 
 ```python
 from scielo_log_validator import validator
 
 # Validate a single file
-result = validator.pipeline_validate('/home/user/2022-03-01_scielo-br.log.gz', sample_size=0.25, apply_path_validation=True, apply_content_validation=True)
+result = validator.pipeline_validate(
+    '/home/user/2022-03-01_scielo-br.log.gz',
+    sample_size=0.25,
+    apply_path_validation=True,
+    apply_content_validation=True,
+)
 
 # Validate all files in a directory
+import os
 for root, _, files in os.walk('/home/user'):
     for file in files:
         file_path = os.path.join(root, file)
-        results = validator.pipeline_validate(
-            path=file_path, 
+        result = validator.pipeline_validate(
+            path=file_path,
             sample_size=0.1,
             apply_path_validation=True,
-            apply_content_validation=True
+            apply_content_validation=True,
         )
 ```
 
-__Result format__
+### Result format
 
-In both modes, the output of the validation process is a JSON object that provides detailed information about the log file, including a summary of the content, validation status, and path details. Here is an example of the output:
+The output is a JSON object providing detailed validation information about the log file, including path details, content summary, and validation status:
 
 ```json
 {
-  "/home/user/2022-03-01_scielo-br.log.gz": {
-    "content": {
-      "summary": {
-        "datetimes": {
-          "(2022, 3, 1, 23)": 5,
-          "(2022, 3, 2, 0)": 312,
-          "(2022, 3, 2, 1)": 319,
-          "(2022, 3, 2, 2)": 321,
-          "(2022, 3, 2, 3)": 331,
-          "(2022, 3, 2, 4)": 321,
-          "(2022, 3, 2, 5)": 320,
-          "(2022, 3, 2, 6)": 324,
-          "(2022, 3, 2, 7)": 376,
-          "(2022, 3, 2, 8)": 345,
-          "(2022, 3, 2, 9)": 480,
-          "(2022, 3, 2, 10)": 416,
-          "(2022, 3, 2, 11)": 506,
-          "(2022, 3, 2, 12)": 620,
-          "(2022, 3, 2, 13)": 452,
-          "(2022, 3, 2, 14)": 419,
-          "(2022, 3, 2, 15)": 399,
-          "(2022, 3, 2, 16)": 518,
-          "(2022, 3, 2, 17)": 419,
-          "(2022, 3, 2, 18)": 406,
-          "(2022, 3, 2, 19)": 615,
-          "(2022, 3, 2, 20)": 668,
-          "(2022, 3, 2, 21)": 546,
-          "(2022, 3, 2, 22)": 683,
-          "(2022, 3, 2, 23)": 442
-        },
-        "invalid_lines": 0,
-        "ips": {
-          "local": 324,
-          "remote": 10239
-        },
-        "total_lines": 105634
-      }
-    },
-    "is_valid": {
-      "all": true,
-      "dates": true,
-      "ips": true
+    "mode": {
+        "path_validation": true,
+        "content_validation": true
     },
     "path": {
-      "collection": null,
-      "date": "2022-03-01",
-      "extension": ".gz",
-      "mimetype": "application/gzip",
-      "paperboy": false
+        "date": "2022-03-01",
+        "paperboy": false,
+        "mimetype": "application/gzip",
+        "extension": ".gz"
     },
-  "probably_date": datetime.datetime(2022, 3, 2, 0, 0)}
+    "content": {
+        "summary": {
+            "datetimes": {
+                "(2022, 3, 1, 23)": 5,
+                "(2022, 3, 2, 0)": 312,
+                "(2022, 3, 2, 1)": 319
+            },
+            "invalid_lines": 0,
+            "ips": {
+                "local": 324,
+                "remote": 10239,
+                "unknown": 0
+            },
+            "total_lines": 10563
+        }
+    },
+    "is_valid": {
+        "ips": true,
+        "dates": true,
+        "all": true
+    },
+    "probably_date": "2022-03-02T00:00:00"
 }
 ```
+
+## Supported log formats
+
+| Format | Description |
+|---|---|
+| NCSA Extended | Standard Apache combined log format with optional domain prefix and IP list fields. |
+| BunnyCDN | Pipe-delimited format with Unix timestamps (7 or 10 digits), country codes, and request IDs. |
