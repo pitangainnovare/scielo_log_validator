@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 from argparse import ArgumentParser
 from datetime import datetime
+from pprint import pprint
 
 import os
 import operator
@@ -202,11 +203,11 @@ def get_total_lines(path, buffer_size=2048):
         with file_utils.open_file(path=path, buffer_size=buffer_size) as fin:
             return sum(1 for _ in fin)
     except EOFError:
-        raise exceptions.TruncatedLogFileError('Arquivo %s está truncado' % path)
+        raise exceptions.TruncatedLogFileError('File %s is truncated' % path)
     except exceptions.InvalidLogFileMimeError:
-        raise exceptions.InvalidLogFileMimeError('Arquivo %s é inválido' % path)
+        raise exceptions.InvalidLogFileMimeError('File %s is invalid' % path)
     except exceptions.LogFileIsEmptyError:
-        raise exceptions.LogFileIsEmptyError('Arquivo %s está vazio' % path)
+        raise exceptions.LogFileIsEmptyError('File %s is empty' % path)
 
 
 def analyze_log_content(path, total_lines, sample_lines):
@@ -232,7 +233,7 @@ def analyze_log_content(path, total_lines, sample_lines):
     try:
         eval_lines = set(range(0, total_lines + 1, int(total_lines/sample_lines)))
     except ZeroDivisionError:
-        raise exceptions.LogFileIsEmptyError('Arquivo %s está vazio' % path)
+        raise exceptions.LogFileIsEmptyError('File %s is empty' % path)
 
     line_counter = 0
 
@@ -509,7 +510,6 @@ def main():
     execution_mode = get_execution_mode(params.path)
 
     print(COMMAND_LINE_SCRIPT_MESSAGE)
-    from pprint import pprint
 
     if execution_mode == 'validate-file':
         # Validate a single file
