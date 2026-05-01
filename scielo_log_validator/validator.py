@@ -448,6 +448,9 @@ def validate_content(path, sample_size=0.1, buffer_size=2048, min_lines=MIN_NUMB
         if total_lines <= min_lines:
             sample_size = 1.0
         sample_lines = int(total_lines * sample_size)
+        # Prevent division by zero in analyze_log_content
+        if sample_lines <= 0:
+            sample_lines = total_lines if total_lines > 0 else 1
         return {'summary': analyze_log_content(path, total_lines, sample_lines)}
     except exceptions.TruncatedLogFileError:
         return {'summary': {'total_lines': {'error': 'File is truncated'},}}
