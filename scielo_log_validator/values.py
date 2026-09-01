@@ -36,15 +36,15 @@ PATTERN_NCSA_EXTENDED_LOG_FORMAT_DOMAIN_WITH_IP_LIST = (
 PATTERN_BUNNYCDN_LOG_FORMAT = (
     r'^(?P<cache>HIT|MISS|BYPASS|EXPIRED|STALE)\|'
     r'(?P<status>\d{3})\|'
-    r'(?P<unix_ts>\d{7}|\d{10})\|'
+    r'(?P<unix_ts>\d{7}|\d{10}|\d{13})\|'
     r'(?P<length>\d+)\|'
     r'(?P<zone>\d+)\|'
     r'(?P<ip>[a-fA-F0-9:.]+)\|'
     r'(?P<referrer>[^|]*)\|'
     r'(?P<path>[^|]+)\|'
-    r'(?P<country>[A-Z0-9]{2,3})\|'
+    r'(?P<edge_location>[A-Z0-9]{2,3})\|'
     r'(?P<user_agent>[^|]*)\|'
     r'(?P<request_id>[a-f0-9]{32})\|'
-    r'(?P<iq>[A-Z]{2})'
+    r'(?P<country_code>[A-Z]{2})'
     r'(?:\|(?P<shield_status>[^|]+))?$'
 )
