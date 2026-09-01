@@ -52,6 +52,11 @@ class TestValidator(unittest.TestCase):
         y, m, d, h = validator.get_year_month_day_hour_from_timestamp(timestamp)
         self.assertEqual((y, m, d, h), (2025, 8, 17, 20))
 
+    def test_extract_year_month_day_hour_from_millisecond_timestamp(self):
+        timestamp = '1785887999998'
+        y, m, d, h = validator.get_year_month_day_hour_from_timestamp(timestamp)
+        self.assertEqual((y, m, d, h), (2026, 8, 4, 20))
+
     def test_count_lines(self):
         obtained_nlines = validator.get_total_lines(self.log_file_wi_1_invalid_content)
         expected_nlines = 7160
@@ -475,6 +480,34 @@ class TestValidator(unittest.TestCase):
         self.assertEqual(results['content']['summary']['datetimes'], {(2025, 12, 24, 20): 1})
         self.assertEqual(results['probably_date'].date(), datetime.date(2025, 12, 24))
         self.assertTrue(results['is_valid']['ips'])
+
+    def test_line_with_millisecond_bunny_timestamp(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2026-08-04_scielo-br.log.gz'
+            with gzip.open(path, 'wt') as fout:
+                fout.write(
+                    'HIT|200|1785887999998|5432|4339610|186.225.0.1|-|'
+                    'https://www.scielo.br/j/neco/a/test/|IQ2|'
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/151.0.0.0 Safari/537.36|'
+                    '8dbbeef65a64c5235f863868a7c94d70|US\n'
+                )
+
+            results = validator.pipeline_validate(
+                sample_size=1,
+                path=path,
+                apply_path_validation=True,
+                apply_content_validation=True,
+            )
+
+        self.assertEqual(results['path']['date'], '2026-08-04')
+        self.assertEqual(results['content']['summary']['invalid_lines'], 0)
+        self.assertEqual(
+            results['content']['summary']['datetimes'],
+            {(2026, 8, 4, 20): 1},
+        )
+        self.assertTrue(results['is_valid']['all'])
 
     def test_get_probably_date_returns_most_frequent(self):
         results = {
