@@ -1,9 +1,11 @@
-from gzip import GzipFile
+from contextlib import contextmanager
+from gzip import BadGzipFile, GzipFile
 
 import bz2
 import magic
 import os
 import re
+import zlib
 
 from scielo_log_validator import exceptions, values, date_utils
 
@@ -49,6 +51,25 @@ def open_file(path, mime_handlers=DEFAULT_MIME_HANDLERS, buffer_size=2048):
         open_mode = 'r'
     
     return mime_handlers[file_mime](path, open_mode)
+
+
+@contextmanager
+def read_file(path, mime_handlers=DEFAULT_MIME_HANDLERS, buffer_size=2048):
+    try:
+        with open_file(path, mime_handlers, buffer_size) as file:
+            yield file
+    except EOFError as exc:
+        raise exceptions.TruncatedLogFileError(
+            'File %s is truncated' % path
+        ) from exc
+    except (BadGzipFile, zlib.error) as exc:
+        raise exceptions.CorruptedLogFileError(
+            'File %s is corrupted: %s' % (path, exc)
+        ) from exc
+    except OSError as exc:
+        raise exceptions.LogFileIOError(
+            'Unable to read file %s: %s' % (path, exc)
+        ) from exc
 
 
 def extract_mime_from_path(path, buffer_size=2048):
