@@ -150,6 +150,36 @@ The output is a JSON object providing detailed validation information about the 
 }
 ```
 
+If the file cannot be read because it is corrupted, truncated, missing, or
+inaccessible, `content` includes a structured error. A readable file that fails
+the content rules does not include this error and is reported through
+`is_valid` as usual.
+
+```json
+{
+    "content": {
+        "summary": {
+            "total_lines": {
+                "error": "File /logs/access.log.gz is corrupted"
+            }
+        },
+        "error": {
+            "code": "file_read_error",
+            "kind": "corrupted",
+            "message": "File /logs/access.log.gz is corrupted"
+        }
+    },
+    "is_valid": {
+        "ips": false,
+        "dates": false,
+        "all": false
+    },
+    "probably_date": {
+        "error": "Date dictionary is empty"
+    }
+}
+```
+
 ## Supported log formats
 
 | Format | Description |
