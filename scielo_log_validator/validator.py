@@ -200,7 +200,7 @@ def get_total_lines(path, buffer_size=2048):
         exceptions.LogFileIsEmptyError: If the file is empty.
     """
     try:
-        with file_utils.open_file(path=path, buffer_size=buffer_size) as fin:
+        with file_utils.read_file(path=path, buffer_size=buffer_size) as fin:
             return sum(1 for _ in fin)
     except EOFError:
         raise exceptions.TruncatedLogFileError('File %s is truncated' % path)
@@ -237,7 +237,7 @@ def analyze_log_content(path, total_lines, sample_lines):
 
     line_counter = 0
 
-    with file_utils.open_file(path) as data:
+    with file_utils.read_file(path) as data:
         for line in data:
             try:
                 decoded_line = line.decode().strip() if isinstance(line, bytes) else line.strip()
@@ -263,7 +263,7 @@ def analyze_log_content(path, total_lines, sample_lines):
                     # Match the pattern and extract the IP address
                     if match:
                         content = match.groupdict()
-                        
+
                         ip_value = content.get('ip')
                         ip_type = get_ip_type(ip_value)
 
@@ -452,8 +452,15 @@ def validate_content(path, sample_size=0.1, buffer_size=2048, min_lines=MIN_NUMB
         if sample_lines <= 0:
             sample_lines = total_lines if total_lines > 0 else 1
         return {'summary': analyze_log_content(path, total_lines, sample_lines)}
-    except exceptions.TruncatedLogFileError:
-        return {'summary': {'total_lines': {'error': 'File is truncated'},}}
+    except exceptions.LogFileReadError as exc:
+        return {
+            'summary': {'total_lines': {'error': str(exc)}},
+            'error': {
+                'code': 'file_read_error',
+                'kind': exc.kind,
+                'message': str(exc),
+            },
+        }
     except exceptions.InvalidLogFileMimeError:
         return {'summary': {'total_lines': {'error': 'File is invalid'},}}
     except exceptions.LogFileIsEmptyError:

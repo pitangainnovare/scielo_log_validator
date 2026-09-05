@@ -2,6 +2,7 @@ import datetime
 import gzip
 import tempfile
 import unittest
+from unittest import mock
 
 from scielo_log_validator import exceptions, validator
 
@@ -133,6 +134,54 @@ class TestValidator(unittest.TestCase):
     def test_validate_content(self):
         results = validator.validate_content(self.log_file_wi_1_invalid_content)
         self.assertIn('summary', results)
+
+    def test_validate_content_reports_corrupted_gzip(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2026-09-04_scielo.pe.log.gz'
+            compressed = bytearray(gzip.compress(b'valid line\n'))
+            compressed[-1] ^= 0xff
+            with open(path, 'wb') as output:
+                output.write(compressed)
+
+            results = validator.validate_content(path)
+
+        self.assertEqual(results['error']['code'], 'file_read_error')
+        self.assertEqual(results['error']['kind'], 'corrupted')
+        self.assertIn('corrupted', results['error']['message'])
+
+    def test_validate_content_reports_truncated_gzip(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2026-09-04_scielo.pe.log.gz'
+            compressed = gzip.compress(b'valid line\n')
+            with open(path, 'wb') as output:
+                output.write(compressed[:-8])
+
+            results = validator.validate_content(path)
+
+        self.assertEqual(results['error']['code'], 'file_read_error')
+        self.assertEqual(results['error']['kind'], 'truncated')
+
+    def test_validate_content_reports_io_error(self):
+        with mock.patch.object(
+            validator.file_utils,
+            'open_file',
+            side_effect=PermissionError('permission denied'),
+        ):
+            results = validator.validate_content('/tmp/2026-09-04_scielo.pe.log.gz')
+
+        self.assertEqual(results['error']['code'], 'file_read_error')
+        self.assertEqual(results['error']['kind'], 'io')
+
+    def test_error_suffix_does_not_determine_validation_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = f'{temp_dir}/2026-09-04-error_scielo.pe.log.gz'
+            with gzip.open(path, 'wt') as output:
+                output.write('request failed\n')
+
+            results = validator.pipeline_validate(path, sample_size=1)
+
+        self.assertNotIn('error', results['content'])
+        self.assertFalse(results['is_valid']['all'])
 
     def test_pipeline_validate_successfully_runs(self):
         obtained_results = validator.pipeline_validate(self.log_file_wi_1_invalid_content)
