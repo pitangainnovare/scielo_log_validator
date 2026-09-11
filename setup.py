@@ -14,7 +14,7 @@ tests_require = [
 
 setuptools.setup(
     name="scielo-log-validator",
-    version="2.0.2",
+    version="2.0.3",
     author="Rafael JP Damaceno",
     author_email="rafael@pitangainnovare.com.br",
     description="",
