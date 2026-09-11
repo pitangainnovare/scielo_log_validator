@@ -503,6 +503,27 @@ class TestValidator(unittest.TestCase):
 
         self.assertDictEqual(results, expected)
 
+    def test_bunny_cache_status_variants_are_valid_content(self):
+        for cache_status in ('REVALIDATED', '-'):
+            with self.subTest(cache_status=cache_status):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    path = f'{temp_dir}/2025-09-10_scielo-br.log.gz'
+                    with gzip.open(path, 'wt') as output:
+                        output.write(
+                            f'{cache_status}|200|1757548786|5432|4339610|'
+                            '186.225.0.1|-|https://www.scielo.br/j/neco/a/test/|'
+                            'BR|Mozilla/5.0|8dbbeef65a64c5235f863868a7c94d70|BR\n'
+                        )
+
+                    results = validator.analyze_log_content(
+                        path,
+                        total_lines=1,
+                        sample_lines=1,
+                    )
+
+                self.assertEqual(results['invalid_lines'], 0)
+                self.assertEqual(results['ips']['remote'], 1)
+
     def test_line_with_bucketed_bunny_timestamp(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = f'{temp_dir}/2025-08-17_scielo-br.log.gz'
